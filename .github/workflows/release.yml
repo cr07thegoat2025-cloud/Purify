@@ -1,0 +1,83 @@
+name: Build and release APK
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD_SECRET: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS_SECRET: ${{ secrets.KEY_ALIAS }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/purify.jks"
+            PASS="$KEYSTORE_PASSWORD_SECRET"
+            ALIAS="${KEY_ALIAS_SECRET:-purify}"
+            echo "SIGNING_NOTE=" >> "$GITHUB_ENV"
+          else
+            # No permanent key configured: sign with a throwaway key so the APK still installs.
+            PASS="purify-temporary-key"
+            ALIAS="purify"
+            keytool -genkeypair -keystore "$RUNNER_TEMP/purify.jks" \
+              -storepass "$PASS" -keypass "$PASS" -alias "$ALIAS" \
+              -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Purify"
+            echo "SIGNING_NOTE=Signed with a temporary key. To update over an older install you must uninstall it first. Add the KEYSTORE_BASE64, KEYSTORE_PASSWORD and KEY_ALIAS repository secrets to fix this." >> "$GITHUB_ENV"
+          fi
+          {
+            echo "KEYSTORE_FILE=$RUNNER_TEMP/purify.jks"
+            echo "KEYSTORE_PASSWORD=$PASS"
+            echo "KEY_ALIAS=$ALIAS"
+            echo "KEY_PASSWORD=$PASS"
+          } >> "$GITHUB_ENV"
+
+      - name: Set version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "VERSION_NAME=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          else
+            echo "VERSION_NAME=0.0.0-dev" >> "$GITHUB_ENV"
+          fi
+          echo "VERSION_CODE=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+
+      - name: Build release APK
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon :app:assembleRelease
+
+      - name: Name the APK
+        run: cp app/build/outputs/apk/release/app-release.apk "Purify-${VERSION_NAME}.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Purify-apk
+          path: Purify-*.apk
+
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Purify-*.apk
+          generate_release_notes: true
+          body: |
+            **Install:** download `Purify-${{ github.ref_name }}.apk` on your Android phone, open it, and allow installs from your browser or file manager when asked. Requires Android 8.0 or newer.
+
+            ${{ env.SIGNING_NOTE }}
