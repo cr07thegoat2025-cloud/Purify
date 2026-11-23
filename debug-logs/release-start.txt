@@ -1,0 +1,7 @@
+Starting: Intent { cmp=com.purify.app/.MainActivity }
+Status: ok
+LaunchState: COLD
+Activity: com.purify.app/.MainActivity
+TotalTime: 1292
+WaitTime: 1294
+Complete
