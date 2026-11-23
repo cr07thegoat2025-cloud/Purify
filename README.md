@@ -20,14 +20,12 @@ A free, ad-free Android app for listening to the Quran. All 114 surahs, full-sur
 
 ## Publishing a new version
 
-Pushing a tag that starts with `v` builds the APK and attaches it to a GitHub release:
+Every push to `main` builds the APK and publishes it as a new GitHub release (v1.0.1, v1.0.2, and so on). To pick the version number yourself, push a tag instead:
 
 ```
-git tag v1.0.1
-git push origin v1.0.1
+git tag v1.1.0
+git push origin v1.1.0
 ```
-
-Pushes to `main` also build the APK (downloadable from the workflow run's artifacts) so you can check that everything compiles.
 
 ### Signing key (do this once)
 
